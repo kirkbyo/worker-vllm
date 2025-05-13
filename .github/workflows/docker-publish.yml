@@ -32,6 +32,52 @@ jobs:
       id-token: write
 
     steps:
+      - name: Delete huge unnecessary tools folder
+        run: rm -rf /opt/hostedtoolcache
+
+      - name: Free up disk space
+        run: |
+          echo "=============================================================================="
+          echo "Freeing up disk space on CI system"
+          echo "=============================================================================="
+
+          echo "Listing 100 largest packages"
+          dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
+          df -h
+          
+          echo "Removing large packages (safely)"
+          # Only remove packages that won't affect Docker build/runtime
+          sudo apt-get remove -y '^dotnet-.*' || true
+          sudo apt-get remove -y '^llvm-.*' || true
+          sudo apt-get remove -y '^mongodb-.*' || true
+          sudo apt-get remove -y '^mysql-.*' || true
+          sudo apt-get remove -y azure-cli google-cloud-sdk google-chrome-stable firefox powershell || true
+          
+          # Clean up apt cache and remove unused packages
+          sudo apt-get autoremove -y
+          sudo apt-get clean
+          
+          df -h
+          echo "Removing large directories (safely)"
+
+          # Only remove directories that won't affect Docker build/runtime
+          sudo rm -rf /usr/share/dotnet/ || true
+          sudo rm -rf /usr/local/graalvm/ || true
+          sudo rm -rf /usr/local/.ghcup/ || true
+          sudo rm -rf /usr/local/share/powershell || true
+          sudo rm -rf /usr/local/share/chromium || true
+          sudo rm -rf /usr/local/lib/android || true
+          
+          # Keep node_modules in /usr/local/lib/node_modules as it might be needed
+          # for build tools, but clean up any temporary node_modules in other locations
+          find /tmp -name "node_modules" -type d -prune -exec rm -rf '{}' + || true
+          
+          df -h
+          
+          # Verify essential Docker-related packages are still present
+          echo "Verifying essential packages..."
+          dpkg -l | grep -E 'docker|containerd|runc' || true
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
